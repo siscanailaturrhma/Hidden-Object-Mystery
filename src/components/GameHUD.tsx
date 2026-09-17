@@ -12,6 +12,7 @@ import {
   Layers,
   ChevronRight,
   Info,
+  Home,
 } from 'lucide-react';
 import { GameLevel, GameMode, HiddenItem } from '../types';
 
@@ -39,6 +40,7 @@ interface GameHUDProps {
   onOpenLevelSelect: () => void;
   onRestartLevel: () => void;
   onToggleGameMode: () => void;
+  onReturnToMainMenu?: () => void;
 }
 
 export const GameHUD: React.FC<GameHUDProps> = ({
@@ -65,6 +67,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
   onOpenLevelSelect,
   onRestartLevel,
   onToggleGameMode,
+  onReturnToMainMenu,
 }) => {
   const formatTime = (secs: number) => {
     const m = Math.floor(secs / 60);
@@ -80,6 +83,17 @@ export const GameHUD: React.FC<GameHUDProps> = ({
       <header className="pointer-events-auto flex flex-wrap items-center justify-between gap-2.5 rounded-2xl bg-stone-900/85 p-2.5 sm:px-4 sm:py-3 text-stone-100 shadow-2xl backdrop-blur-md border border-stone-800/80">
         {/* Left: Level Info & Switcher */}
         <div className="flex items-center gap-2 sm:gap-3">
+          {onReturnToMainMenu && (
+            <button
+              id="btn-return-home"
+              onClick={onReturnToMainMenu}
+              className="p-2 rounded-xl bg-stone-800/80 hover:bg-stone-750 text-stone-400 hover:text-amber-300 border border-stone-700/60 transition-all active:scale-95 cursor-pointer"
+              title="Kembali ke Menu Utama"
+            >
+              <Home className="h-4 w-4" />
+            </button>
+          )}
+
           <button
             id="btn-level-select"
             onClick={onOpenLevelSelect}

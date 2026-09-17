@@ -6,10 +6,14 @@ import { GameHUD } from './components/GameHUD';
 import { LevelCompleteModal } from './components/LevelCompleteModal';
 import { GameDesignModal } from './components/GameDesignModal';
 import { LevelSelectModal } from './components/LevelSelectModal';
+import { StartScreen } from './components/StartScreen';
+import { HowToPlayModal } from './components/HowToPlayModal';
+import { GameEndingScreen } from './components/GameEndingScreen';
 import { sound } from './utils/audio';
 import { Sparkles, HelpCircle, X, Info } from 'lucide-react';
 
 export default function App() {
+  const [gameState, setGameState] = useState<'start' | 'playing' | 'ending'>('start');
   const [currentLevelIndex, setCurrentLevelIndex] = useState<number>(0);
   const currentLevel = GAME_LEVELS[currentLevelIndex];
 
@@ -18,6 +22,9 @@ export default function App() {
     currentLevel.items.map((i) => ({ ...i, found: false }))
   );
   const [score, setScore] = useState<number>(0);
+  const [cumulativeTimeElapsed, setCumulativeTimeElapsed] = useState<number>(0);
+  const [cumulativeHintsUsed, setCumulativeHintsUsed] = useState<number>(0);
+
   const [timeRemaining, setTimeRemaining] = useState<number>(currentLevel.timeLimitSeconds);
   const [timeElapsed, setTimeElapsed] = useState<number>(0);
   const [gameMode, setGameMode] = useState<GameMode>('cozy');
@@ -57,7 +64,8 @@ export default function App() {
   // Modals
   const [showGDD, setShowGDD] = useState<boolean>(false);
   const [showLevelSelect, setShowLevelSelect] = useState<boolean>(false);
-  const [showControlsGuide, setShowControlsGuide] = useState<boolean>(true);
+  const [showHowToPlay, setShowHowToPlay] = useState<boolean>(false);
+  const [showControlsGuide, setShowControlsGuide] = useState<boolean>(false);
 
   // Toast notifications
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -93,12 +101,31 @@ export default function App() {
     loadLevel(currentLevel);
   };
 
-  // Timer Tick (Timed Mode)
+  // Start game from beginning or play again
+  const handleStartGame = () => {
+    setGameState('playing');
+  };
+
+  const handlePlayAgain = () => {
+    setScore(0);
+    setCumulativeTimeElapsed(0);
+    setCumulativeHintsUsed(0);
+    setCompletedLevelIds([]);
+    loadLevel(GAME_LEVELS[0]);
+    setGameState('playing');
+  };
+
+  const handleReturnToMainMenu = () => {
+    setGameState('start');
+  };
+
+  // Timer Tick (Timed Mode and Cumulative Time)
   useEffect(() => {
-    if (isLevelComplete) return;
+    if (gameState !== 'playing' || isLevelComplete) return;
 
     const timer = setInterval(() => {
       setTimeElapsed((prev) => prev + 1);
+      setCumulativeTimeElapsed((prev) => prev + 1);
 
       if (gameMode === 'timed') {
         setTimeRemaining((prev) => {
@@ -113,7 +140,7 @@ export default function App() {
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [gameMode, isLevelComplete]);
+  }, [gameState, gameMode, isLevelComplete]);
 
   // Handle Item Found
   const handleItemFound = (foundItem: HiddenItem) => {
@@ -126,10 +153,16 @@ export default function App() {
       const remaining = updated.filter((i) => !i.found);
       if (remaining.length === 0) {
         setTimeout(() => {
-          setIsLevelComplete(true);
           setCompletedLevelIds((prev) =>
             prev.includes(currentLevel.id) ? prev : [...prev, currentLevel.id]
           );
+
+          // Check if player completed Level 10 (the final mystery level)
+          if (currentLevelIndex === GAME_LEVELS.length - 1) {
+            setGameState('ending');
+          } else {
+            setIsLevelComplete(true);
+          }
         }, 1200);
       }
 
@@ -173,6 +206,7 @@ export default function App() {
     sound.playHint();
     setHintsLeft((prev) => prev - 1);
     setHintsUsed((prev) => prev + 1);
+    setCumulativeHintsUsed((prev) => prev + 1);
     setActiveHintItemId(target.id);
     setSelectedClueItem(target);
 
@@ -247,88 +281,123 @@ export default function App() {
 
   return (
     <div className="relative w-screen h-screen overflow-hidden bg-stone-950 font-sans select-none text-stone-100">
-      {/* 3D WebGL Canvas Layer */}
-      <GameCanvas
-        level={currentLevel}
-        foundItemIds={items.filter((i) => i.found).map((i) => i.id)}
-        activeHintItemId={activeHintItemId}
-        flashlightMode={flashlightMode}
-        onItemFound={handleItemFound}
-        onMisclick={handleMisclick}
-        onContainerToggled={handleContainerToggled}
-      />
-
-      {/* Heads-Up Display (HUD) Layer */}
-      <GameHUD
-        level={currentLevel}
-        levelNumber={currentLevelIndex + 1}
-        totalLevels={GAME_LEVELS.length}
-        items={items}
-        foundCount={foundCount}
-        totalCount={totalCount}
-        score={score}
-        timeRemaining={timeRemaining}
-        gameMode={gameMode}
-        hintsLeft={hintsLeft}
-        isMuted={isMuted}
-        isMusicPlaying={isMusicPlaying}
-        flashlightMode={flashlightMode}
-        selectedClueItem={selectedClueItem}
-        onToggleMute={toggleMute}
-        onToggleMusic={toggleMusic}
-        onToggleFlashlight={() => setFlashlightMode((prev) => !prev)}
-        onUseHint={handleUseHint}
-        onSelectClueItem={setSelectedClueItem}
-        onOpenGDD={() => setShowGDD(true)}
-        onOpenLevelSelect={() => setShowLevelSelect(true)}
-        onRestartLevel={restartCurrentLevel}
-        onToggleGameMode={toggleGameMode}
-      />
-
-      {/* Floating Toast Notification */}
-      {toastMessage && (
-        <div className="pointer-events-none fixed top-20 left-1/2 -translate-x-1/2 z-40 px-4 py-2 rounded-2xl bg-stone-900/90 text-amber-300 text-xs font-semibold border border-amber-500/50 shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-top-3 flex items-center gap-2">
-          <Sparkles className="h-4 w-4 text-amber-400 shrink-0" />
-          <span>{toastMessage}</span>
-        </div>
-      )}
-
-      {/* Initial Player Controls Onboarding Banner */}
-      {showControlsGuide && (
-        <div className="pointer-events-auto fixed bottom-28 left-1/2 -translate-x-1/2 z-30 flex items-center justify-between gap-4 rounded-2xl bg-stone-900/95 px-4 py-2.5 text-xs text-stone-300 border border-stone-700/80 shadow-2xl backdrop-blur-md max-w-lg w-[92%] sm:w-auto">
-          <div className="flex items-center gap-2.5">
-            <HelpCircle className="h-4 w-4 text-amber-400 shrink-0" />
-            <span className="leading-snug">
-              <strong>Kontrol 3D:</strong> Klik & geser untuk memutar ruangan 360° • Scroll untuk zoom • Klik laci/peti untuk membuka • Klik barang untuk mengumpulkannya.
-            </span>
-          </div>
-          <button
-            onClick={() => setShowControlsGuide(false)}
-            className="text-stone-400 hover:text-stone-100 p-1 rounded-lg hover:bg-stone-800 transition-colors"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-      )}
-
-      {/* LEVEL COMPLETE MODAL */}
-      {isLevelComplete && (
-        <LevelCompleteModal
-          level={currentLevel}
-          levelNumber={currentLevelIndex + 1}
-          totalLevels={GAME_LEVELS.length}
-          stats={currentStats}
-          hasNextLevel={hasNextLevel}
-          onNextLevel={() => {
-            if (hasNextLevel) {
-              loadLevel(GAME_LEVELS[currentLevelIndex + 1]);
-            }
-          }}
-          onReplay={restartCurrentLevel}
-          onRestartFromFirst={() => loadLevel(GAME_LEVELS[0])}
-          onOpenGDD={() => setShowGDD(true)}
+      {/* START SCREEN */}
+      {gameState === 'start' && (
+        <StartScreen
+          onStartGame={handleStartGame}
+          onOpenHowToPlay={() => setShowHowToPlay(true)}
+          onOpenLevelSelect={() => setShowLevelSelect(true)}
+          isMuted={isMuted}
+          isMusicPlaying={isMusicPlaying}
+          onToggleMute={toggleMute}
+          onToggleMusic={toggleMusic}
         />
       )}
+
+      {/* GAMEPLAY CANVAS & HUD */}
+      {gameState === 'playing' && (
+        <>
+          {/* 3D WebGL Canvas Layer */}
+          <GameCanvas
+            level={currentLevel}
+            foundItemIds={items.filter((i) => i.found).map((i) => i.id)}
+            activeHintItemId={activeHintItemId}
+            flashlightMode={flashlightMode}
+            onItemFound={handleItemFound}
+            onMisclick={handleMisclick}
+            onContainerToggled={handleContainerToggled}
+          />
+
+          {/* Heads-Up Display (HUD) Layer */}
+          <GameHUD
+            level={currentLevel}
+            levelNumber={currentLevelIndex + 1}
+            totalLevels={GAME_LEVELS.length}
+            items={items}
+            foundCount={foundCount}
+            totalCount={totalCount}
+            score={score}
+            timeRemaining={timeRemaining}
+            gameMode={gameMode}
+            hintsLeft={hintsLeft}
+            isMuted={isMuted}
+            isMusicPlaying={isMusicPlaying}
+            flashlightMode={flashlightMode}
+            selectedClueItem={selectedClueItem}
+            onToggleMute={toggleMute}
+            onToggleMusic={toggleMusic}
+            onToggleFlashlight={() => setFlashlightMode((prev) => !prev)}
+            onUseHint={handleUseHint}
+            onSelectClueItem={setSelectedClueItem}
+            onOpenGDD={() => setShowGDD(true)}
+            onOpenLevelSelect={() => setShowLevelSelect(true)}
+            onRestartLevel={restartCurrentLevel}
+            onToggleGameMode={toggleGameMode}
+            onReturnToMainMenu={handleReturnToMainMenu}
+          />
+
+          {/* Floating Toast Notification */}
+          {toastMessage && (
+            <div className="pointer-events-none fixed top-20 left-1/2 -translate-x-1/2 z-40 px-4 py-2 rounded-2xl bg-stone-900/90 text-amber-300 text-xs font-semibold border border-amber-500/50 shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-top-3 flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-amber-400 shrink-0" />
+              <span>{toastMessage}</span>
+            </div>
+          )}
+
+          {/* Initial Player Controls Onboarding Banner */}
+          {showControlsGuide && (
+            <div className="pointer-events-auto fixed bottom-28 left-1/2 -translate-x-1/2 z-30 flex items-center justify-between gap-4 rounded-2xl bg-stone-900/95 px-4 py-2.5 text-xs text-stone-300 border border-stone-700/80 shadow-2xl backdrop-blur-md max-w-lg w-[92%] sm:w-auto">
+              <div className="flex items-center gap-2.5">
+                <HelpCircle className="h-4 w-4 text-amber-400 shrink-0" />
+                <span className="leading-snug">
+                  <strong>Kontrol 3D:</strong> Klik & geser untuk memutar ruangan 360° • Scroll untuk zoom • Klik laci/peti untuk membuka • Klik barang untuk mengumpulkannya.
+                </span>
+              </div>
+              <button
+                onClick={() => setShowControlsGuide(false)}
+                className="text-stone-400 hover:text-stone-100 p-1 rounded-lg hover:bg-stone-800 transition-colors"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          )}
+
+          {/* LEVEL COMPLETE MODAL (FOR LEVELS 1 TO 9) */}
+          {isLevelComplete && hasNextLevel && (
+            <LevelCompleteModal
+              level={currentLevel}
+              levelNumber={currentLevelIndex + 1}
+              totalLevels={GAME_LEVELS.length}
+              stats={currentStats}
+              hasNextLevel={hasNextLevel}
+              onNextLevel={() => {
+                if (hasNextLevel) {
+                  loadLevel(GAME_LEVELS[currentLevelIndex + 1]);
+                }
+              }}
+              onReplay={restartCurrentLevel}
+              onRestartFromFirst={() => loadLevel(GAME_LEVELS[0])}
+              onOpenGDD={() => setShowGDD(true)}
+            />
+          )}
+        </>
+      )}
+
+      {/* GAME ENDING SCREEN (AFTER COMPLETING LEVEL 10) */}
+      {gameState === 'ending' && (
+        <GameEndingScreen
+          totalScore={score}
+          totalTimeSeconds={cumulativeTimeElapsed}
+          totalHintsUsed={cumulativeHintsUsed}
+          totalRoomsCleared={Math.max(completedLevelIds.length, 10)}
+          onPlayAgain={handlePlayAgain}
+          onReturnToMainMenu={handleReturnToMainMenu}
+          onOpenLevelSelect={() => setShowLevelSelect(true)}
+        />
+      )}
+
+      {/* HOW TO PLAY MODAL */}
+      {showHowToPlay && <HowToPlayModal onClose={() => setShowHowToPlay(false)} />}
 
       {/* GAME DESIGN DOCUMENT (GDD) MODAL */}
       {showGDD && <GameDesignModal onClose={() => setShowGDD(false)} />}
@@ -339,7 +408,12 @@ export default function App() {
           levels={GAME_LEVELS}
           currentLevelId={currentLevel.id}
           completedLevelIds={completedLevelIds}
-          onSelectLevel={loadLevel}
+          onSelectLevel={(level) => {
+            loadLevel(level);
+            if (gameState !== 'playing') {
+              setGameState('playing');
+            }
+          }}
           onClose={() => setShowLevelSelect(false)}
         />
       )}
