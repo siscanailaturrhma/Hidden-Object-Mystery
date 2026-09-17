@@ -1,0 +1,6 @@
+{
+  "name": "3D Hidden Object Mystery",
+  "description": "Game 3D mencari barang tersembunyi interaktif dengan eksplorasi diorama 360°, efek visual, audio synthesizer, dan sistem petunjuk.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
